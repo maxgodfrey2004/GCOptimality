@@ -54,13 +54,12 @@ void load_aadata(string infile_name) {
     aa_name = string({aa_name[1], aa_name[2], aa_name[3]});
     aa_data[one_letter_codes[aa_name]] = values;
   }
+  int num_categories = static_cast<int>(aa_data['A'].size());
+  aa_data['*'] = vector<fp_type>(num_categories, fp_type(0));
 }
 
 fp_type difference(char a1, char a2) {
   fp_type sum_of_squared_diffs = 0;
-  if (a1 == '*' || a2 == '*') {
-    return 0;
-  }
   assert(aa_data[a1].size() == aa_data[a2].size());
   for (int i = 0; i < static_cast<int>(aa_data[a1].size()); ++i) {
     fp_type diff = aa_data[a1][i] - aa_data[a2][i];
@@ -73,8 +72,10 @@ fp_type compute_difference_sum(string aa, string b1, string b2, string b3) {
   fp_type diff = 0;
   for (int i = 0; i < static_cast<int>(aa.size()); ++i) {
     for (int j = 0; j < i; ++j) {
-      // Calculate the number of different bases between the acids.
+      // Calculate the number of different bases between the codons.
       int d = int(b1[i] != b1[j]) + int(b2[i] != b2[j]) + int(b3[i] != b3[j]);
+      // If the codons differ by one base, add the difference of their
+      // corresponding amino acids to the sum.
       if (d == 1) {
         diff += difference(aa[i], aa[j]);
       }
