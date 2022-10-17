@@ -5,7 +5,7 @@ CC := g++
 
 DATA_FILE_NAME := aadata.txt
 
-all: run
+all: similarity.out 
 
 run: similarity.out
 	./similarity.out $(DATA_FILE_NAME)
