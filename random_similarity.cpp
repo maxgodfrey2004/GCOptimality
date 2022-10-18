@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <fstream>
 #include <functional>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -21,6 +22,9 @@ const string AA = "FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEG
 const string B1 = "TTTTTTTTTTTTTTTTCCCCCCCCCCCCCCCCAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGG";
 const string B2 = "TTTTCCCCAAAAGGGGTTTTCCCCAAAAGGGGTTTTCCCCAAAAGGGGTTTTCCCCAAAAGGGG";
 const string B3 = "TCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAG";
+
+// Represents the Shannon Entropy of the Universal Genetic Code to 10 decimal places.
+const fp_type UGC_SHANNON_ENTROPY = 4.2181390622;
 
 // List of all one-letter amino acid codes for random selection (including stop codon).
 const string acid_names = "*ACDEFGHIKLMNPQRSTVWY";
@@ -130,6 +134,30 @@ namespace mutation {
     return aa;
   }
 
+  // Computes the Shannon Entropy of a mapping.
+  //
+  fp_type compute_shannon_entropy(string aa) {
+    // If one of the constraints on the mapping is not satisfied, we return a
+    // number that is so small that the genetic algorithm will ignore it.
+    if (aa.size() != 64) {
+      return static_cast<fp_type>(0);
+    }
+    std::unordered_map<char, int> char_counts;
+    for (char c : aa) {
+      ++char_counts[c];
+    }
+    if (char_counts.size() != 21) {
+      return static_cast<fp_type>(0);
+    }
+    fp_type entropy = 0;
+    for (auto &count : char_counts) {
+      // Convert to probability mass
+      fp_type probability = fp_type(count.second) / fp_type(64);
+      entropy += -(probability * log2(probability));
+    }
+    return entropy;
+  }
+
   // Mutation where a genetic code mapping produces three offspring. One is
   // a replica, and the other two have one codon mapped to a different animo
   // acid.
@@ -144,6 +172,38 @@ namespace mutation {
     });
     return mutations; 
   }
+
+  // Replaces a single character in a map randomly such that one codon is
+  // mapped to a different amino acid such that the resulting map has a greater
+  // Shannon Entropy than the Universal Genetic Code.
+  //
+  // If we have tried to replace a random character and failed to create a map
+  // with greater Shannon Entropy than the Universal Genetic Code after
+  // `attempt_threshold` attempts, we return the original map since that is the
+  // most ideal replication that could occur.
+  //
+  string shannon_offspring(string aa, int attempt_threshold = 100) {
+    string child = mutation::random_replace(aa);
+    int attempts = 1;
+    while (mutation::compute_shannon_entropy(child) < UGC_SHANNON_ENTROPY) {
+      if (attempts == attempt_threshold) {
+        return aa;
+      }
+      child = mutation::random_replace(aa);
+      ++attempts;
+    }
+    return child;
+  }
+
+  // Mutation where each genetic code mapping produces two offspring: a map
+  // where one character has been replaced such that its Shannon Entropy is
+  // greater than or equal to that of the Universal Genetic Code (if one can
+  // easily be found, otherwise a clone of the original map), and a clone of
+  // the original map.
+  //
+  vector<string> random_replace_shannon_offspring(string aa) {
+    return vector<string>({shannon_offspring(aa), aa});
+  }
 }  // namespace mutations
 
 // Evolves a genetic code for a specified number of generations with a
@@ -157,7 +217,8 @@ void evolve_genetic_code(
 ) {
   // Create a starting pool.
   std::cout << "Universal Genetic Code:   " << AA << "\tScore: "
-            << compute_difference_sum(AA) << std::endl;
+            << compute_difference_sum(AA) << "\tEntropy: "
+            << UGC_SHANNON_ENTROPY << std::endl;
   vector<string> population({AA});
   while (population.size() < population_size) {
     auto additions = gen_offspring(AA);
@@ -183,7 +244,9 @@ void evolve_genetic_code(
     }
     std::cout << "Generation " << generation + 1 << "\tBest map: "
               << all_offspring[0].second << "\tScore: "
-              << all_offspring[0].first << std::endl;
+              << all_offspring[0].first << "\tEntropy: "
+              << mutation::compute_shannon_entropy(all_offspring[0].second)
+              << std::endl;
   }
 }
 
@@ -198,9 +261,21 @@ int main(int argc, char *argv[]) {
   load_aadata(infile_name);
   srand(100);  // Get consistent results every time by setting a random seed.
   
+  if (fabs(mutation::compute_shannon_entropy(AA) - UGC_SHANNON_ENTROPY) > 1e-6) {
+    std::cerr << "Error: UGC_SHANNON_ENTROPY contains an imprecise value."
+              << std::endl;
+    return 1;
+  }
+
   // 1.1
   // evolve_genetic_code(10, 10, mutation::random_replace_offspring);
 
   // 1.2
   // evolve_genetic_code(1000, 100, mutation::random_replace_offspring);
+
+  // 2.1
+  // evolve_genetic_code(10, 200, mutation::random_replace_shannon_offspring);
+
+  // 2.2
+  // evolve_genetic_code(1000, 100, mutation::random_replace_shannon_offspring);
 }
